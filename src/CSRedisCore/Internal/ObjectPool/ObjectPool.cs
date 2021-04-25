@@ -72,7 +72,6 @@ namespace CSRedis.Internal.ObjectPool
 
             new Thread(() =>
             {
-
                 if (UnavailableException != null)
                 {
                     var bgcolor = Console.BackgroundColor;
@@ -156,7 +155,10 @@ namespace CSRedis.Internal.ObjectPool
             {
 
                 lock (_allObjectsLock)
-                    _allObjects.ForEach(a => a.LastGetTime = a.LastReturnTime = new DateTime(2000, 1, 1));
+                    _allObjects.ForEach(a => { 
+                        a.LastGetTime = a.LastReturnTime = new DateTime(2000, 1, 1);
+                        a.ResetValue();
+                    });
 
                 Policy.OnAvailable();
 
@@ -241,19 +243,85 @@ namespace CSRedis.Internal.ObjectPool
 
             AppDomain.CurrentDomain.ProcessExit += (s1, e1) =>
             {
-                if (Policy.IsAutoDisposeWithSystem)
-                    running = false;
+                running = false;
             };
             try
             {
                 Console.CancelKeyPress += (s1, e1) =>
                 {
                     if (e1.Cancel) return;
-                    if (Policy.IsAutoDisposeWithSystem) 
-                        running = false;
+                    running = false;
                 };
+
+                //定时释放连接池对象
+                StartReleasePoolService();
             }
             catch { }
+        }
+
+
+        /// <summary>
+        /// 增加过期回收
+        /// </summary>
+        private void StartReleasePoolService()
+        {
+            new Thread(() =>
+            {
+                
+                for (int i = _freeObjects.Count; i > 0; i--)
+                {
+                    try
+                    {
+                        if (_freeObjects.Count <= this.Policy.PoolMinSize)
+                            break;
+
+                        bool tryGet = _freeObjects.TryPop(out var obj);
+                        if (tryGet
+                        && obj != null
+                        //&& Policy.IdleTimeout > TimeSpan.Zero
+                        && DateTime.Now.Subtract(obj.LastReturnTime) > TimeSpan.FromMinutes(this.Policy.PoolReleaseInterval))
+                        {
+                            this.Policy.OnDestroy(obj.Value);
+                        }
+                        else
+                        {
+                            Return(obj);
+                        }
+                    }
+                    catch (Exception ex){
+                        Console.WriteLine("释放发生错误:"+ex.Message);
+                    }
+                }
+
+                //防止订阅的被释放，但这样会导致释放数量并不多。
+                for (var a = 0; a < _allObjects.Count; a++)
+                {
+                    if (_allObjects.Count <= this.Policy.PoolMinSize)
+                        break;
+
+                    if (_allObjects[a] != null
+                       &&Policy.IsCanRecover(_allObjects[a].Value) //add 校验对象，确认是否要可回收
+                       && DateTime.Now.Subtract(_allObjects[a].LastReturnTime) > TimeSpan.FromMinutes(this.Policy.PoolReleaseInterval))
+                    {
+                        Policy.OnDestroy(_allObjects[a].Value);
+                        try { (_allObjects[a].Value as IDisposable)?.Dispose(); } catch { }
+                        try { lock (_allObjectsLock) _allObjects.Remove(_allObjects[a]); } catch { }
+                    }
+                }
+
+                if (this.Policy == null)
+                    //该情况主要是redis中间件还未起来
+                {
+                    Console.WriteLine("当前Policy对象尚未创建完毕，本次跳过并等待下一轮询。");
+                    Thread.CurrentThread.Join(TimeSpan.FromMinutes(2));//等2分钟
+                }
+                else
+                {
+                    Thread.CurrentThread.Join(TimeSpan.FromMinutes(1 + this.Policy.PoolReleaseInterval));
+                }
+
+                StartReleasePoolService();
+            }).Start();
         }
 
         /// <summary>
@@ -267,7 +335,7 @@ namespace CSRedis.Internal.ObjectPool
                 throw new ObjectDisposedException($"【{Policy.Name}】对象池已释放，无法访问。");
 
             if (checkAvailable && UnavailableException != null)
-                throw new Exception($"【{Policy.Name}】状态不可用，等待后台检查程序恢复方可使用。{UnavailableException?.Message}", UnavailableException);
+               throw new Exception($"【{Policy.Name}】状态不可用，等待后台检查程序恢复方可使用。{UnavailableException?.Message}");
 
             if ((_freeObjects.TryPop(out var obj) == false || obj == null) && _allObjects.Count < Policy.PoolSize)
             {
@@ -495,6 +563,7 @@ namespace CSRedis.Internal.ObjectPool
                 }
             }
         }
+
 
         public void Dispose()
         {

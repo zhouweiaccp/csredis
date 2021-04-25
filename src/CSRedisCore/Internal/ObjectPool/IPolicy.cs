@@ -19,6 +19,11 @@ namespace CSRedis.Internal.ObjectPool
         int PoolSize { get; set; }
 
         /// <summary>
+        /// 池最小容量（保证回收后仍然有可用对象）
+        /// </summary>
+        int PoolMinSize { get; set; }
+
+        /// <summary>
         /// 默认获取超时设置
         /// </summary>
         TimeSpan SyncGetTimeout { get; set; }
@@ -29,6 +34,11 @@ namespace CSRedis.Internal.ObjectPool
         TimeSpan IdleTimeout { get; set; }
 
         /// <summary>
+        /// 连接池定时释放间隔时间 分钟
+        /// </summary>
+        int PoolReleaseInterval { get; set; }
+
+        /// <summary>
         /// 异步获取排队队列大小，小于等于0不生效
         /// </summary>
         int AsyncGetCapacity { get; set; }
@@ -37,11 +47,6 @@ namespace CSRedis.Internal.ObjectPool
         /// 获取超时后，是否抛出异常
         /// </summary>
         bool IsThrowGetTimeoutException { get; set; }
-
-        /// <summary>
-        /// 监听 AppDomain.CurrentDomain.ProcessExit/Console.CancelKeyPress 事件自动释放
-        /// </summary>
-        bool IsAutoDisposeWithSystem { get; set; }
 
         /// <summary>
         /// 后台定时检查可用性间隔秒数
@@ -100,5 +105,6 @@ namespace CSRedis.Internal.ObjectPool
         /// 事件：不可用时触发
         /// </summary>
         void OnUnavailable();
+        bool IsCanRecover(T value);
     }
 }

@@ -235,6 +235,12 @@ namespace CSRedis
                         case "asyncpipeline":
                             _asyncPipeline = kv.Length > 1 ? kv[1].ToLower().Trim() == "true" : true;
                             break;
+                        case "poolreleaseinterval":
+                            PoolReleaseInterval = int.TryParse(kv.Length > 1 ? kv[1].Trim() : "30", out int poolReleaseInterval) ? poolReleaseInterval : 30;
+                            break;
+                        case "poolminsize":
+                            PoolMinSize = int.TryParse(kv.Length > 1 ? kv[1].Trim() : "50", out int poolMinSize) ? poolMinSize : 50;
+                            break;
                     }
                 }
 
@@ -243,6 +249,9 @@ namespace CSRedis
                     PrevReheatConnectionPool(_pool, _preheat);
             }
         }
+
+        public int PoolMinSize { get; set; } = 50;
+        public int PoolReleaseInterval { get; set; } = 30;
 
         public bool OnCheckAvailable(Object<RedisClient> obj)
         {
@@ -383,6 +392,15 @@ namespace CSRedis
                 Task.WaitAll(initTasks);
             }
             while (initConns.TryTake(out var conn)) pool.Return(conn);
+        }
+
+        public bool IsCanRecover(RedisClient redisClient)
+        {
+            //如果是订阅的，则不能回收。
+            if (redisClient.IsSubClient)
+                return false;
+
+            return true;
         }
     }
 }

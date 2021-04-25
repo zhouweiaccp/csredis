@@ -11,12 +11,13 @@ namespace CSRedis.Internal.ObjectPool
 
         public string Name { get; set; } = typeof(DefaultPolicy<T>).GetType().FullName;
         public int PoolSize { get; set; } = 1000;
+        public int PoolMinSize { get; set; } = 50;
         public TimeSpan SyncGetTimeout { get; set; } = TimeSpan.FromSeconds(10);
         public TimeSpan IdleTimeout { get; set; } = TimeSpan.FromSeconds(50);
         public int AsyncGetCapacity { get; set; } = 10000;
         public bool IsThrowGetTimeoutException { get; set; } = true;
-        public bool IsAutoDisposeWithSystem { get; set; } = true;
         public int CheckAvailableInterval { get; set; } = 5;
+        public int PoolReleaseInterval { get; set; } = 30;
 
         public Func<T> CreateObject;
         public Action<Object<T>> OnGetObject;
@@ -70,6 +71,11 @@ namespace CSRedis.Internal.ObjectPool
         public void OnUnavailable()
         {
 
+        }
+
+        public bool IsCanRecover(T value)
+        {
+            return true;//回收自定义
         }
     }
 }

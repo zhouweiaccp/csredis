@@ -338,5 +338,15 @@ namespace CSRedis
             else
                 return -1;
         }
+        /// <summary>
+        /// 是否是订阅连接
+        /// </summary>
+        public bool IsSubClient
+        {
+            get
+            {
+                return this._subscription.Listening;
+            }
+        }
     }
 }
